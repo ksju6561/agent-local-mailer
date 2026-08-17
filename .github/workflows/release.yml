@@ -17,7 +17,7 @@ jobs:
           - runner: macos-14
             target: bun-darwin-arm64
             asset: darwin-arm64
-          - runner: macos-13
+          - runner: macos-14
             target: bun-darwin-x64
             asset: darwin-x64
           - runner: ubuntu-latest
