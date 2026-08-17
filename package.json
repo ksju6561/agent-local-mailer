@@ -1,0 +1,44 @@
+{
+  "name": "agent-local-mailer",
+  "version": "1.0.0",
+  "description": "Lightweight local SQLite-based HTTP inter-agent mailbox server and turn hooks for multi-agent systems",
+  "main": "src/index.ts",
+  "bin": {
+    "agent-local-mailer": "./src/cli.ts",
+    "alm": "./src/cli.ts"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "cli": "bun run src/cli.ts",
+    "compile": "bun build --compile ./src/cli.ts --outfile=dist/agent-local-mailer",
+    "compile:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 ./src/cli.ts --outfile=dist/agent-local-mailer-darwin-arm64",
+    "compile:darwin-x64": "bun build --compile --target=bun-darwin-x64 ./src/cli.ts --outfile=dist/agent-local-mailer-darwin-x64",
+    "compile:linux-arm64": "bun build --compile --target=bun-linux-arm64 ./src/cli.ts --outfile=dist/agent-local-mailer-linux-arm64",
+    "compile:linux-x64": "bun build --compile --target=bun-linux-x64 ./src/cli.ts --outfile=dist/agent-local-mailer-linux-x64",
+    "compile:all": "bun run compile:darwin-arm64 && bun run compile:darwin-x64 && bun run compile:linux-arm64 && bun run compile:linux-x64",
+    "demo:sim": "bun run demo/simulate_agents.ts",
+    "demo:10mb": "bun run demo/test_10mb_payload.ts",
+    "test": "bun test"
+  },
+  "keywords": [
+    "ai-agents",
+    "multi-agent",
+    "agent-mesh",
+    "mailbox",
+    "hooks",
+    "turn-hooks",
+    "sqlite",
+    "bun"
+  ],
+  "author": "sir-mirr",
+  "license": "MIT",
+  "dependencies": {
+    "hono": "^4.7.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.8.2"
+  }
+}

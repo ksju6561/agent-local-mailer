@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+bun.lock
+bun.lockb
+
+# Build outputs
+dist/
+*.tar.gz
+SHA256SUMS
+
+# Local database and temp files
+data/*.db*
+data/*.sqlite*
+*.log
+.DS_Store
+.env
+.env.local
+
+# IDE & Antigravity
+.idea/
+.vscode/
+.gemini/
