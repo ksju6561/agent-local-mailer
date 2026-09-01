@@ -11,6 +11,20 @@ interface RawRow {
   read_at: number | null;
 }
 
+export interface MessagePage {
+  messages: MailMessage[];
+  hasMore: boolean;
+  latestId: number | null;
+  nextBeforeId: number | null;
+}
+
+export interface MessagePageQuery {
+  agentId?: string;
+  limit?: number;
+  beforeId?: number;
+  afterId?: number;
+}
+
 export class MailStore {
   private db: Database;
 
@@ -77,6 +91,53 @@ export class MailStore {
     const stmt = this.db.prepare('SELECT * FROM messages ORDER BY created_at DESC');
     const rows = stmt.all() as unknown as RawRow[];
     return rows.map((r) => this.mapRow(r));
+  }
+
+  /**
+   * Read-only cursor page used by dashboards and diagnostics.
+   *
+   * This deliberately never changes read state. Cursor pagination must not be
+   * coupled to the legacy read-on-GET behavior because doing so can mark rows
+   * outside the returned page as processed.
+   */
+  public getMessagePage(query: MessagePageQuery = {}): MessagePage {
+    const limit = Math.min(500, Math.max(1, Number(query.limit ?? 100)));
+    const conditions: string[] = [];
+    const params: Array<string | number> = [];
+
+    if (query.agentId) {
+      conditions.push("(to_agent = ? OR to_agent = '*')");
+      params.push(query.agentId);
+    }
+    if (query.beforeId !== undefined) {
+      conditions.push('id < ?');
+      params.push(query.beforeId);
+    }
+    if (query.afterId !== undefined) {
+      conditions.push('id > ?');
+      params.push(query.afterId);
+    }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const direction = query.afterId !== undefined ? 'ASC' : 'DESC';
+    const rows = this.db.prepare(`
+      SELECT * FROM messages
+      ${where}
+      ORDER BY id ${direction}
+      LIMIT ?
+    `).all(...params, limit + 1) as unknown as RawRow[];
+
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const messages = pageRows.map((row) => this.mapRow(row));
+    const ids = messages.map((message) => message.id);
+
+    return {
+      messages,
+      hasMore,
+      latestId: ids.length > 0 ? Math.max(...ids) : null,
+      nextBeforeId: ids.length > 0 ? Math.min(...ids) : null,
+    };
   }
 
   /**

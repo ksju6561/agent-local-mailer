@@ -65,4 +65,27 @@ describe('HTTP Server API & Client SDK Tests', () => {
     const empty = await agent2.checkInbox();
     expect(empty.length).toBe(0);
   });
+
+  test('cursor API returns bounded read-only pages without gaps', async () => {
+    for (let index = 0; index < 105; index += 1) {
+      store.sendMessage({ from: 'api-pager', to: 'api-paged-agent', body: `page-${index}` });
+    }
+
+    const firstRes = await fetch(`${baseUrl}/api/mail?agentId=api-paged-agent&limit=100`);
+    const first = (await firstRes.json()) as any;
+    expect(firstRes.status).toBe(200);
+    expect(first.messages).toHaveLength(100);
+    expect(first.page.hasMore).toBe(true);
+
+    const secondRes = await fetch(
+      `${baseUrl}/api/mail?agentId=api-paged-agent&limit=100&beforeId=${first.page.nextBeforeId}`,
+    );
+    const second = (await secondRes.json()) as any;
+    expect(second.messages).toHaveLength(5);
+    expect(second.page.hasMore).toBe(false);
+    expect(new Set([...first.messages, ...second.messages].map((message: any) => message.id)).size).toBe(105);
+
+    const stats = store.getStats();
+    expect(stats.unread).toBeGreaterThanOrEqual(105);
+  });
 });

@@ -60,4 +60,34 @@ describe('MailStore Tests', () => {
     const cancelCount = store.cancelSentMessage('agent-sender', msg.id);
     expect(cancelCount).toBe(1);
   });
+
+  test('cursor pages are stable and never mark unread rows', () => {
+    for (let index = 0; index < 205; index += 1) {
+      store.sendMessage({ from: 'pager', to: 'paged-agent', body: `message-${index}` });
+    }
+
+    const first = store.getMessagePage({ agentId: 'paged-agent', limit: 100 });
+    expect(first.messages).toHaveLength(100);
+    expect(first.hasMore).toBe(true);
+    expect(first.messages[0].id).toBeGreaterThan(first.messages[99].id);
+
+    const second = store.getMessagePage({
+      agentId: 'paged-agent',
+      limit: 100,
+      beforeId: first.nextBeforeId!,
+    });
+    const last = store.getMessagePage({
+      agentId: 'paged-agent',
+      limit: 100,
+      beforeId: second.nextBeforeId!,
+    });
+    const ids = [...first.messages, ...second.messages, ...last.messages].map((message) => message.id);
+    expect(new Set(ids).size).toBe(205);
+    expect(last.hasMore).toBe(false);
+
+    const newer = store.sendMessage({ from: 'pager', to: 'paged-agent', body: 'newer' });
+    const delta = store.getMessagePage({ agentId: 'paged-agent', limit: 100, afterId: first.latestId! });
+    expect(delta.messages.some((message) => message.id === newer.id)).toBe(true);
+    expect(store.getStats().unread).toBe(206);
+  });
 });

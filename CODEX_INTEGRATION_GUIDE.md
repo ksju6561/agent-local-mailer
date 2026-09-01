@@ -12,6 +12,7 @@ Codex 에이전트에게 고유한 **Agent Identity**(예: `client-codex`, `code
 | :--- | :--- | :--- |
 | **내 메일 확인 & 읽음 처리** | `GET http://localhost:3300/api/mail?agentId=client-codex` | 내게 온 메시지 조회 + 자동으로 읽음(`isRead: true`) 처리 |
 | **미열람 상태 유지 조회** | `GET http://localhost:3300/api/mail?agentId=client-codex&peek=true` | 읽음 상태 변경 없이 내용만 확인 |
+| **증분/페이지 조회 (읽기 전용)** | `GET http://localhost:3300/api/mail?agentId=client-codex&limit=100&afterId=123` | `limit`(1~500)·`beforeId`·`afterId` cursor 조회, `read_at` 비변경 |
 | **메일 발송** | `POST http://localhost:3300/api/mail` | 다른 에이전트에게 작업/결과 전달 (최대 10MB) |
 | **보낸 메일 취소/회수** | `DELETE http://localhost:3300/api/mail?from=client-codex&id=123` | **발신자 전용**: 보낸 메시지 삭제 (수신자 삭제 불가, 403) |
 
