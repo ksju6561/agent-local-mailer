@@ -90,4 +90,19 @@ describe('MailStore Tests', () => {
     expect(delta.messages.some((message) => message.id === newer.id)).toBe(true);
     expect(store.getStats().unread).toBe(206);
   });
+
+  test('cursor pages support status, text, agent, from, and to filters', () => {
+    store.sendMessage({ from: 'filter-alpha-sender', to: 'filter-reviewer', body: 'needle-alpha' });
+    store.sendMessage({ from: 'filter-beta-sender', to: 'filter-worker', body: 'needle-beta' });
+
+    expect(store.getMessagePage({ query: 'NEEDLE-ALPHA' }).messages).toHaveLength(1);
+    expect(store.getMessagePage({ agent: 'FILTER-ALPHA' }).messages).toHaveLength(1);
+    expect(store.getMessagePage({ agent: 'filter-worker' }).messages).toHaveLength(1);
+    expect(store.getMessagePage({ fromAgent: 'alpha-sender' }).messages).toHaveLength(1);
+    expect(store.getMessagePage({ toAgent: 'reviewer' }).messages).toHaveLength(1);
+    expect(store.getMessagePage({ agent: 'filter', fromAgent: 'beta', toAgent: 'worker' }).messages).toHaveLength(1);
+    expect(store.getMessagePage({ fromAgent: 'alpha', toAgent: 'worker' }).messages).toHaveLength(0);
+    expect(store.getMessagePage({ agent: 'filter-', status: 'unread' }).messages).toHaveLength(2);
+    expect(store.getMessagePage({ agent: 'filter-', status: 'read' }).messages).toHaveLength(0);
+  });
 });

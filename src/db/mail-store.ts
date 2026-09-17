@@ -11,6 +11,8 @@ interface RawRow {
   read_at: number | null;
 }
 
+export type MessageReadStatus = 'all' | 'read' | 'unread';
+
 export interface MessagePage {
   messages: MailMessage[];
   hasMore: boolean;
@@ -23,6 +25,11 @@ export interface MessagePageQuery {
   limit?: number;
   beforeId?: number;
   afterId?: number;
+  status?: MessageReadStatus;
+  query?: string;
+  agent?: string;
+  fromAgent?: string;
+  toAgent?: string;
 }
 
 export class MailStore {
@@ -117,6 +124,31 @@ export class MailStore {
       conditions.push('id > ?');
       params.push(query.afterId);
     }
+    if (query.status === 'read') {
+      conditions.push('read_at IS NOT NULL');
+    } else if (query.status === 'unread') {
+      conditions.push('read_at IS NULL');
+    }
+    if (query.query) {
+      conditions.push(`(
+        instr(lower(from_agent), lower(?)) > 0
+        OR instr(lower(to_agent), lower(?)) > 0
+        OR instr(lower(body), lower(?)) > 0
+      )`);
+      params.push(query.query, query.query, query.query);
+    }
+    if (query.agent) {
+      conditions.push('(instr(lower(from_agent), lower(?)) > 0 OR instr(lower(to_agent), lower(?)) > 0)');
+      params.push(query.agent, query.agent);
+    }
+    if (query.fromAgent) {
+      conditions.push('instr(lower(from_agent), lower(?)) > 0');
+      params.push(query.fromAgent);
+    }
+    if (query.toAgent) {
+      conditions.push('instr(lower(to_agent), lower(?)) > 0');
+      params.push(query.toAgent);
+    }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const direction = query.afterId !== undefined ? 'ASC' : 'DESC';
@@ -128,8 +160,7 @@ export class MailStore {
     `).all(...params, limit + 1) as unknown as RawRow[];
 
     const hasMore = rows.length > limit;
-    const pageRows = rows.slice(0, limit);
-    const messages = pageRows.map((row) => this.mapRow(row));
+    const messages = rows.slice(0, limit).map((row) => this.mapRow(row));
     const ids = messages.map((message) => message.id);
 
     return {

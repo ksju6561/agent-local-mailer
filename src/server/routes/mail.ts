@@ -54,16 +54,29 @@ export function createMailRouter(mailStore: MailStore): Hono {
     const limitParam = c.req.query('limit');
     const beforeIdParam = c.req.query('beforeId');
     const afterIdParam = c.req.query('afterId');
+    const statusParam = c.req.query('status');
+    const queryParam = c.req.query('q')?.trim();
+    const agentParam = c.req.query('agent')?.trim();
+    const fromAgentParam = c.req.query('fromAgent')?.trim();
+    const toAgentParam = c.req.query('toAgent')?.trim();
 
-    if (beforeIdParam && afterIdParam) {
+    if (beforeIdParam !== undefined && afterIdParam !== undefined) {
       return c.json({ success: false, error: 'Use either "beforeId" or "afterId", not both.' }, 400);
     }
 
-    const usesCursorPage = limitParam !== undefined || beforeIdParam !== undefined || afterIdParam !== undefined;
+    const usesCursorPage = limitParam !== undefined
+      || beforeIdParam !== undefined
+      || afterIdParam !== undefined
+      || statusParam !== undefined
+      || queryParam !== undefined
+      || agentParam !== undefined
+      || fromAgentParam !== undefined
+      || toAgentParam !== undefined;
     if (usesCursorPage) {
       const limit = limitParam === undefined ? 100 : Number(limitParam);
       const beforeId = beforeIdParam === undefined ? undefined : Number(beforeIdParam);
       const afterId = afterIdParam === undefined ? undefined : Number(afterIdParam);
+      const status = statusParam || 'all';
       if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
         return c.json({ success: false, error: '"limit" must be an integer between 1 and 500.' }, 400);
       }
@@ -71,8 +84,25 @@ export function createMailRouter(mailStore: MailStore): Hono {
         || (afterId !== undefined && (!Number.isInteger(afterId) || afterId < 0))) {
         return c.json({ success: false, error: '"beforeId" must be positive and "afterId" non-negative.' }, 400);
       }
+      if (!['all', 'read', 'unread'].includes(status)) {
+        return c.json({ success: false, error: '"status" must be one of: all, read, unread.' }, 400);
+      }
+      const textFilters = [queryParam, agentParam, fromAgentParam, toAgentParam].filter(Boolean) as string[];
+      if (textFilters.some((value) => value.length > 200)) {
+        return c.json({ success: false, error: 'Text filters cannot exceed 200 characters.' }, 400);
+      }
 
-      const page = mailStore.getMessagePage({ agentId, limit, beforeId, afterId });
+      const page = mailStore.getMessagePage({
+        agentId,
+        limit,
+        beforeId,
+        afterId,
+        status: status as 'all' | 'read' | 'unread',
+        query: queryParam || undefined,
+        agent: agentParam || undefined,
+        fromAgent: fromAgentParam || undefined,
+        toAgent: toAgentParam || undefined,
+      });
       return c.json({
         success: true,
         agentId: agentId || null,

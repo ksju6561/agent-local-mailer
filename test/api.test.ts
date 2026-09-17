@@ -88,4 +88,27 @@ describe('HTTP Server API & Client SDK Tests', () => {
     const stats = store.getStats();
     expect(stats.unread).toBeGreaterThanOrEqual(105);
   });
+
+  test('cursor API filters by status, text, agent, sender, and recipient', async () => {
+    store.sendMessage({ from: 'api-filter-alpha', to: 'api-filter-reviewer', body: 'review needle' });
+    store.sendMessage({ from: 'api-filter-beta', to: 'api-filter-worker', body: 'worker message' });
+
+    const agentRes = await fetch(`${baseUrl}/api/mail?agent=FILTER-REVIEWER&status=unread&limit=20`);
+    const agent = (await agentRes.json()) as any;
+    expect(agentRes.status).toBe(200);
+    expect(agent.messages).toHaveLength(1);
+    expect(agent.messages[0].from).toBe('api-filter-alpha');
+
+    const combinedRes = await fetch(
+      `${baseUrl}/api/mail?q=worker&fromAgent=filter-beta&toAgent=filter-worker&limit=20`,
+    );
+    const combined = (await combinedRes.json()) as any;
+    expect(combined.messages).toHaveLength(1);
+    expect(combined.messages[0].to).toBe('api-filter-worker');
+
+    const incompatibleCursorRes = await fetch(`${baseUrl}/api/mail?limit=10&beforeId=2&afterId=1`);
+    expect(incompatibleCursorRes.status).toBe(400);
+    const tooLongRes = await fetch(`${baseUrl}/api/mail?fromAgent=${'x'.repeat(201)}`);
+    expect(tooLongRes.status).toBe(400);
+  });
 });

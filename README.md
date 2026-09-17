@@ -126,7 +126,7 @@ async function runAgentTurn(turnNumber: number) {
 | :--- | :--- | :--- |
 | `POST` | `/api/mail` | 메시지 발송 (`from`, `to`, `body` - 최대 10MB) |
 | `GET` | `/api/mail?agentId=...` | 특정 에이전트에게 온 메시지 목록 조회 (`to = agentId` 또는 `to = '*'`) |
-| `GET` | `/api/mail?agentId=...&limit=...` | 읽기 전용 cursor 조회 (`limit`, `beforeId`, `afterId` — 아래 절 참고) |
+| `GET` | `/api/mail?agentId=...&limit=...` | 읽기 전용 cursor 조회 (`status`, `q`, `agent`, `fromAgent`, `toAgent` 선택) |
 | `DELETE`| `/api/mail?from=...` | **발신자 전용**: 보낸 메시지 회수/취소 삭제 (`id` 선택 지정 가능, 수신자 삭제 불가) |
 | `GET` | `/api/mail/stats` | 메일 통계 (전체, 미확인, 확인) |
 | `GET` | `/health` | 서버 상태 확인 (10MB payload limit 표시) |
@@ -134,12 +134,15 @@ async function runAgentTurn(turnNumber: number) {
 
 ### 읽기 전용 cursor 조회
 
-`limit`, `beforeId`, `afterId` 중 하나라도 명시하면 cursor 조회로 동작한다. `limit`은 1~500
-범위이고 기본값은 100이다. `beforeId`는 지정한 id보다 오래된 행을, `afterId`는 지정한 id보다
-새로운 행을 반환하며, 두 파라미터는 함께 사용할 수 없다.
+`limit`, `beforeId`, `afterId`, `status`, `q`, `agent`, `fromAgent`, `toAgent` 중 하나라도 명시하면
+cursor 조회로 동작한다. `limit`은 1~500 범위이고 기본값은 100이다. `beforeId`는 지정한 id보다
+오래된 행을, `afterId`는 지정한 id보다 새로운 행을 반환하며, 두 파라미터는 함께 사용할 수 없다.
+`status`는 `all`, `read`, `unread` 중 하나다. `q`는 발신자, 수신자, 본문을 검색하고, `agent`는
+발신자 또는 수신자 이름을 검색한다. `fromAgent`와 `toAgent`는 각 방향을 부분 일치로 필터링한다.
 
 ```text
 GET /api/mail?agentId=coder-01&limit=100
+GET /api/mail?limit=20&status=unread&agent=planner&fromAgent=wallet&toAgent=reviewer
 GET /api/mail?agentId=coder-01&limit=100&beforeId=1200
 GET /api/mail?agentId=coder-01&limit=100&afterId=1300
 ```

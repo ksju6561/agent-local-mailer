@@ -213,6 +213,65 @@ export function getDashboardHtml(): string {
       background: var(--accent-indigo);
     }
 
+    .query-filters {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .query-filter label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text-muted);
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .query-filter input {
+      padding: 6px 8px;
+      font-size: 11.5px;
+    }
+
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      font-size: 11.5px;
+    }
+
+    .pagination-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .page-btn, .page-size {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      border-radius: 6px;
+      padding: 5px 9px;
+      font-size: 11.5px;
+    }
+
+    .page-btn { cursor: pointer; }
+    .page-btn:hover:not(:disabled) { border-color: var(--accent-indigo); }
+    .page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .page-size option { background: #111827; }
+
+    @media (max-width: 620px) {
+      .query-filters { grid-template-columns: 1fr; }
+      .pagination { align-items: flex-start; flex-direction: column; }
+    }
+
     /* Message Item */
     .msg-item {
       background: rgba(0, 0, 0, 0.25);
@@ -515,7 +574,7 @@ export function getDashboardHtml(): string {
         <div class="card-title">
           <span>📬 Shared Messages</span>
           <div style="display: flex; gap: 8px; align-items: center;">
-            <input id="filter-text" placeholder="Filter agent or text..." style="width: 160px; padding: 3px 8px; font-size: 11px;" oninput="renderMessages(true)">
+            <input id="filter-text" placeholder="Search text..." style="width: 180px; padding: 3px 8px; font-size: 11px;" oninput="scheduleSearch()">
           </div>
         </div>
 
@@ -525,8 +584,38 @@ export function getDashboardHtml(): string {
           <button class="tab-btn" onclick="setTab('read', this)">🟢 Read (열람 완료만)</button>
         </div>
 
+        <div class="query-filters">
+          <div class="query-filter">
+            <label for="filter-agent">Agent name</label>
+            <input id="filter-agent" placeholder="From or To" oninput="scheduleSearch()">
+          </div>
+          <div class="query-filter">
+            <label for="filter-from">From</label>
+            <input id="filter-from" placeholder="Sender agent" oninput="scheduleSearch()">
+          </div>
+          <div class="query-filter">
+            <label for="filter-to">To</label>
+            <input id="filter-to" placeholder="Recipient agent" oninput="scheduleSearch()">
+          </div>
+        </div>
+
         <div id="msg-container" onmouseenter="isHovered = true" onmouseleave="isHovered = false">
           Loading messages...
+        </div>
+
+        <div class="pagination">
+          <span id="page-summary">Page 1</span>
+          <div class="pagination-actions">
+            <label for="page-size">Rows</label>
+            <select id="page-size" class="page-size" onchange="changePageSize()">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+            </select>
+            <button id="page-newer" class="page-btn" onclick="goNewer()" disabled>← Newer</button>
+            <button id="page-older" class="page-btn" onclick="goOlder()" disabled>Older →</button>
+          </div>
         </div>
       </div>
 
@@ -585,13 +674,37 @@ export function getDashboardHtml(): string {
     let isPaused = false;
     let isHovered = false;
     let pollInterval = null;
+    let searchTimer = null;
+    let pageCursors = [null];
+    let currentPageIndex = 0;
+    let pageInfo = { hasMore: false, nextBeforeId: null };
 
     async function fetchMessages(forceRender = false) {
       if (isPaused && !forceRender) return;
 
       try {
+        const params = new URLSearchParams({
+          peek: 'true',
+          limit: document.getElementById('page-size').value,
+          status: currentFilter,
+        });
+        const query = document.getElementById('filter-text').value.trim();
+        const agent = document.getElementById('filter-agent').value.trim();
+        const fromAgent = document.getElementById('filter-from').value.trim();
+        const toAgent = document.getElementById('filter-to').value.trim();
+        const beforeId = pageCursors[currentPageIndex];
+        if (query) params.set('q', query);
+        if (agent) params.set('agent', agent);
+        if (fromAgent) params.set('fromAgent', fromAgent);
+        if (toAgent) params.set('toAgent', toAgent);
+        if (beforeId !== null) params.set('beforeId', String(beforeId));
+
         const [msgsRes, statsRes] = await Promise.all([
-          fetch('/api/mail?peek=true').then(r => r.json()),
+          fetch('/api/mail?' + params.toString()).then(async r => {
+            const data = await r.json();
+            if (!r.ok) throw new Error(data.error || 'Message query failed');
+            return data;
+          }),
           fetch('/api/mail/stats').then(r => r.json()).catch(() => null)
         ]);
 
@@ -604,6 +717,8 @@ export function getDashboardHtml(): string {
         if (msgsRes && msgsRes.messages) {
           const newJson = JSON.stringify(msgsRes.messages);
           rawMessages = msgsRes.messages;
+          pageInfo = msgsRes.page || { hasMore: false, nextBeforeId: null };
+          updatePagination();
 
           if (forceRender || (newJson !== lastRenderedJson && !isHovered)) {
             lastRenderedJson = newJson;
@@ -619,27 +734,13 @@ export function getDashboardHtml(): string {
       currentFilter = tab;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       if (btn) btn.classList.add('active');
-      renderMessages(true);
+      resetPagination();
+      fetchMessages(true);
     }
 
     function renderMessages(force = false) {
       const container = document.getElementById('msg-container');
-      const filterText = document.getElementById('filter-text').value.toLowerCase().trim();
-
-      let list = rawMessages;
-      if (currentFilter === 'unread') {
-        list = list.filter(m => !m.isRead);
-      } else if (currentFilter === 'read') {
-        list = list.filter(m => m.isRead);
-      }
-
-      if (filterText) {
-        list = list.filter(m => 
-          m.from.toLowerCase().includes(filterText) ||
-          m.to.toLowerCase().includes(filterText) ||
-          m.body.toLowerCase().includes(filterText)
-        );
-      }
+      const list = rawMessages;
 
       if (list.length === 0) {
         container.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:30px;">No messages match filter.</div>';
@@ -680,6 +781,48 @@ export function getDashboardHtml(): string {
       }).join('');
     }
 
+    function resetPagination() {
+      pageCursors = [null];
+      currentPageIndex = 0;
+      pageInfo = { hasMore: false, nextBeforeId: null };
+      lastRenderedJson = '';
+    }
+
+    function updatePagination() {
+      document.getElementById('page-summary').textContent =
+        'Page ' + (currentPageIndex + 1) + ' · ' + rawMessages.length + ' message' + (rawMessages.length === 1 ? '' : 's');
+      document.getElementById('page-newer').disabled = currentPageIndex === 0;
+      document.getElementById('page-older').disabled = !pageInfo.hasMore || pageInfo.nextBeforeId === null;
+    }
+
+    function goOlder() {
+      if (!pageInfo.hasMore || pageInfo.nextBeforeId === null) return;
+      pageCursors = pageCursors.slice(0, currentPageIndex + 1);
+      pageCursors.push(pageInfo.nextBeforeId);
+      currentPageIndex += 1;
+      fetchMessages(true);
+    }
+
+    function goNewer() {
+      if (currentPageIndex === 0) return;
+      currentPageIndex -= 1;
+      pageCursors = pageCursors.slice(0, currentPageIndex + 1);
+      fetchMessages(true);
+    }
+
+    function changePageSize() {
+      resetPagination();
+      fetchMessages(true);
+    }
+
+    function scheduleSearch() {
+      if (searchTimer) clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        resetPagination();
+        fetchMessages(true);
+      }, 250);
+    }
+
     async function sendMessage(e) {
       e.preventDefault();
       const from = document.getElementById('from').value;
@@ -693,6 +836,7 @@ export function getDashboardHtml(): string {
       });
 
       document.getElementById('body').value = '';
+      resetPagination();
       fetchMessages(true);
     }
 
